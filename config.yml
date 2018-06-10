@@ -1,0 +1,13 @@
+---
+vehicle:
+  vin: ~
+  name: Runabout
+account:
+  username: ~
+  password: ~
+  country: north_america
+logs:
+  level: INFO
+ifttt:
+  event: charging_status
+  api_key: ~

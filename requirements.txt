@@ -1,0 +1,4 @@
+bimmer_connected>=0.5.1
+tacconfig>=0.5.1
+requests>=2.18.4
+pyfttt>=0.3.2
