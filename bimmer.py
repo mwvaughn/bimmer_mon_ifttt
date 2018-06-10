@@ -84,6 +84,8 @@ def main():
         logger.error("Failed to iterate over vehicle state", e)
         sys.exit(1)
 
+    exit(0)
+
 
 if __name__ == '__main__':
     main()
