@@ -14,10 +14,11 @@ MAPPINGS = {
     'ERROR': 'not charging due to an error',
     'FINISHED_FULLY_CHARGED': 'completely charged',
     'FINISHED_NOT_FULL': 'done charging but not full',
-    'INVALID': 'apparently not charging',
+    'INVALID': 'probably not charging',
     'NOT_CHARGING': 'not charging',
-    'WAITING_FOR_CHARGING': 'not charging yet'
+    'WAITING_FOR_CHARGING': 'waiting to charge'
 }
+
 
 def main():
     settings = config.read_config(namespace='BMW')
@@ -55,9 +56,9 @@ def main():
             # cosmetic tweak to status
             if charging_status == 'INVALID':
                 if last_update_reason == 'VEHICLE_SHUTDOWN':
-                    charging_status_human = 'parked but not charging'
+                    charging_status_human = 'not charging though the car is parked'
                 if last_update_reason == 'VEHICLE_MOVING':
-                    charging_status_human = 'not charging because it is being driven'
+                    charging_status_human = 'not charging as it is being driven'
 
             battery_level = v.state.charging_level_hv
             time_remaining = v.state.charging_time_remaining
@@ -74,11 +75,13 @@ def main():
             logger.info('Charge percentage: {}'.format(
                 battery_level))
 
-            send_event(settings.ifttt.api_key,
-                       settings.ifttt.event,
-                       value1=charging_status_human,
-                       value2=battery_level,
-                       value3=time_remaining)
+            if charging_status in settings.when:
+                logger.warning("Batter is not charging for some reason")
+                send_event(settings.ifttt.api_key,
+                           settings.ifttt.event,
+                           value1=charging_status_human,
+                           value2=battery_level,
+                           value3=time_remaining)
 
     except Exception as e:
         logger.error("Failed to iterate over vehicle state", e)

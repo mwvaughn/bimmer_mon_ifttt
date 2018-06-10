@@ -11,3 +11,8 @@ logs:
 ifttt:
   event: charging_status
   api_key: ~
+when:
+  - 'INVALID'
+  - 'ERROR'
+  - 'NOT_CHARGING'
+  - 'WAITING_FOR_CHARGING'
