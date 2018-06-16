@@ -11,8 +11,10 @@ logs:
 ifttt:
   event: charging_status
   api_key: ~
+slack:
+  webhook: ~
 when:
-  - 'INVALID'
-  - 'ERROR'
-  - 'NOT_CHARGING'
-  - 'WAITING_FOR_CHARGING'
+  - INVALID
+  - ERROR
+  - NOT_CHARGING
+  - WAITING_FOR_CHARGING

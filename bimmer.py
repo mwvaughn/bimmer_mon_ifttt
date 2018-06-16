@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import os
 import sys
+import json
 import logging
+import requests
 from tacconfig import config
 from pyfttt import *
 from bimmer_connected.account import ConnectedDriveAccount
@@ -18,6 +20,22 @@ MAPPINGS = {
     'NOT_CHARGING': 'not charging',
     'WAITING_FOR_CHARGING': 'waiting to charge'
 }
+
+
+def to_slack(settings, message,
+             channel='notifications',
+             icon=':electric_plug:'):
+
+    payload = {'channel': channel,
+               'icon_emoji': icon,
+               'username': 'chargebot',
+               'text': message}
+
+    r = requests.post(settings.webhook,
+                      data=json.dumps(payload),
+                      headers={"Content-type": "application/json"})
+
+    r.raise_for_status()
 
 
 def main():
@@ -40,7 +58,6 @@ def main():
     except Exception as e:
         logger.error("Failed to connect to BMW servers", e)
         sys.exit(1)
-
 
     try:
         for v in bc.vehicles:
@@ -76,12 +93,30 @@ def main():
                 battery_level))
 
             if charging_status in settings.when:
-                logger.warning("Batter is not charging for some reason")
+                logger.warning("Battery is not charging for some reason")
                 send_event(settings.ifttt.api_key,
                            settings.ifttt.event,
                            value1=charging_status_human,
                            value2=battery_level,
                            value3=time_remaining)
+
+            try:
+                slack_icon = ':electric_plug:'
+                if battery_level < 50:
+                    slack_icon = ':warning:'
+                slack_message = "Your BMW is {}.".format(charging_status_human)
+                slack_message = slack_message + " Its battery is {}% full.".format(battery_level)
+                if battery_level < 95:
+                    slack_message = slack_message + " {} remains till fully charged.".format(time_remaining)
+
+                # # mention car owners in Slack message if battery is low
+                # if battery_level < 60:
+                #     slack_message = slack_message + ' '.join(settings.slack.mentions)
+
+                to_slack(settings.slack, slack_message, icon=slack_icon)
+
+            except Exception as e:
+                logger.warning("Failed to post to Slack: {}".format(e))
 
     except Exception as e:
         logger.error("Failed to iterate over vehicle state", e)
