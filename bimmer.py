@@ -5,9 +5,10 @@ import json
 import logging
 import requests
 from tacconfig import config
-from pyfttt import *
+from pyfttt import send_event
 from bimmer_connected.account import ConnectedDriveAccount
 from bimmer_connected.country_selector import get_region_from_name
+from bimmer_connected.state import LockState
 
 HERE = os.getcwd()
 
@@ -24,11 +25,11 @@ MAPPINGS = {
 
 def to_slack(settings, message,
              channel='notifications',
-             icon=':electric_plug:'):
+             icon=':battery:'):
 
     payload = {'channel': channel,
-               'icon_emoji': icon,
-               'username': 'chargebot',
+               'icon_emoji': settings.icon,
+               'username': settings.username,
                'text': message}
 
     r = requests.post(settings.webhook,
@@ -82,6 +83,12 @@ def main():
             if time_remaining is None:
                 time_remaining = 'Unknown'
 
+            driver_door_status = v.state.attributes["doorDriverFront"]
+            passenger_door_status = v.state.attributes["doorPassengerFront"]
+            door_locks_status = v.state.door_lock_state
+            fuel_level_pct = int(
+                (v.state.attributes["remainingFuel"] / v.state.attributes["maxFuel"]) * 100)
+
             logger.info('Last update: {}'.format(ts))
             logger.info('Last reason: {}'.format(last_update_reason))
             logger.info('Position: {}, {}'.format(pos[0], pos[1]))
@@ -91,32 +98,67 @@ def main():
                 time_remaining))
             logger.info('Charge percentage: {}'.format(
                 battery_level))
+            logger.info('Driver door: {}'.format(driver_door_status.title()))
+            logger.info('Passenger door: {}'.format(
+                passenger_door_status.title()))
+            logger.info('Door locks: {}'.format(
+                str(door_locks_status).replace('LockState.', '').title()))
+            logger.info('Fuel level: {}%'.format(fuel_level_pct))
 
-            if charging_status in settings.when:
-                logger.warning("Battery is not charging for some reason")
-                send_event(settings.ifttt.api_key,
-                           settings.ifttt.event,
-                           value1=charging_status_human,
-                           value2=battery_level,
-                           value3=time_remaining)
+            if settings.actions.ifttt_notify_not_charging:
+                if charging_status in settings.bad_charge_status:
+                    logger.warning("Battery is not charging for some reason")
+                    send_event(settings.ifttt.api_key,
+                               settings.ifttt.event,
+                               value1=charging_status_human,
+                               value2=battery_level,
+                               value3=time_remaining)
 
-            try:
-                slack_icon = ':electric_plug:'
-                if battery_level < 50:
-                    slack_icon = ':warning:'
-                slack_message = "Your BMW is {}.".format(charging_status_human)
-                slack_message = slack_message + " Its battery is {}% full.".format(battery_level)
-                if battery_level < 95:
-                    slack_message = slack_message + " {} remains till fully charged.".format(time_remaining)
+            if settings.actions.slack_notify_charging_status:
+                try:
+                    slack_icon = ':electric_plug:'
+                    if battery_level < 50:
+                        slack_icon = ':warning:'
+                    slack_message = "Your BMW is {}.".format(
+                        charging_status_human)
+                    slack_message = slack_message + \
+                        " Its battery is {}% full.".format(battery_level)
+                    if battery_level < 95:
+                        slack_message = slack_message + \
+                            " {} remains till fully charged.".format(
+                                time_remaining)
 
-                # # mention car owners in Slack message if battery is low
-                # if battery_level < 60:
-                #     slack_message = slack_message + ' '.join(settings.slack.mentions)
+                    to_slack(settings.slack, slack_message, icon=slack_icon)
 
-                to_slack(settings.slack, slack_message, icon=slack_icon)
+                except Exception as e:
+                    logger.warning("Failed to post to Slack: {}".format(e))
 
-            except Exception as e:
-                logger.warning("Failed to post to Slack: {}".format(e))
+            if door_locks_status not in (LockState.LOCKED, LockState.SECURED):
+                if settings.actions.slack_notify_door_unlocked:
+                    try:
+                        slack_message = ':unlock: Your BMW i3 was found to be *UNLOCKED*!'
+                        to_slack(settings.slack, slack_message,
+                                 icon=slack_icon)
+                    except Exception as e:
+                        logger.warning("Failed to post to Slack: {}".format(e))
+
+                if settings.actions.bmw_trigger_remote_door_lock:
+                    try:
+                        logger.info('Remotely locking doors!')
+                        v.remote_services.trigger_remote_door_lock()
+                    except Exception as e:
+                        logger.error(
+                            '"Failed to remotely lock doors: {}'.format(e))
+
+            if fuel_level_pct <= settings.low_fuel_pct:
+                if settings.actions.slack_notify_low_fuel:
+                    try:
+                        slack_message = ':fuelpump: Your BMW i3 is low on gas ({}%)'.format(
+                            fuel_level_pct)
+                        to_slack(settings.slack, slack_message,
+                                 icon=slack_icon)
+                    except Exception as e:
+                        logger.warning("Failed to post to Slack: {}".format(e))
 
     except Exception as e:
         logger.error("Failed to iterate over vehicle state", e)

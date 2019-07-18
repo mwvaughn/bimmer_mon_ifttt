@@ -13,8 +13,17 @@ ifttt:
   api_key: ~
 slack:
   webhook: ~
-when:
+  icon: ':blue_car:'
+  username: 'bmw_bot'
+low_fuel_pct: 20
+bad_charge_status:
   - INVALID
   - ERROR
   - NOT_CHARGING
   - WAITING_FOR_CHARGING
+actions:
+  ifttt_notify_not_charging: True
+  slack_notify_charging_status: True
+  slack_notify_door_unlocked: True
+  slack_notify_low_fuel: True
+  bmw_trigger_remote_door_lock: True
