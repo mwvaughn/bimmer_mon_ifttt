@@ -23,14 +23,14 @@ MAPPINGS = {
 }
 
 
-def to_slack(settings, message,
-             channel='notifications',
-             icon=':battery:'):
+def to_slack(settings, message, channel='notifications', icon=':battery:'):
 
-    payload = {'channel': channel,
-               'icon_emoji': settings.icon,
-               'username': settings.username,
-               'text': message}
+    payload = {
+        'channel': channel,
+        'icon_emoji': settings.icon,
+        'username': settings.username,
+        'text': message
+    }
 
     r = requests.post(settings.webhook,
                       data=json.dumps(payload),
@@ -83,27 +83,33 @@ def main():
             if time_remaining is None:
                 time_remaining = 'Unknown'
 
-            driver_door_status = v.state.attributes["doorDriverFront"]
-            passenger_door_status = v.state.attributes["doorPassengerFront"]
+            # print(json.dumps(v.state.attributes, indent=4))
+
+            driver_door_status = v.state.attributes["STATUS"][
+                "doorDriverFront"]
+            passenger_door_status = v.state.attributes["STATUS"][
+                "doorPassengerFront"]
             door_locks_status = v.state.door_lock_state
             fuel_level_pct = int(
-                (v.state.attributes["remainingFuel"] / v.state.attributes["maxFuel"]) * 100)
+                (v.state.attributes["STATUS"]["remainingFuel"] /
+                 v.state.attributes["STATUS"]["maxFuel"]) * 100)
+
+            range_miles = int(v.state.attributes["STATUS"]["remainingRangeFuelMls"]) + \
+                int(v.state.attributes["STATUS"]["maxRangeElectricMls"])
 
             logger.info('Last update: {}'.format(ts))
             logger.info('Last reason: {}'.format(last_update_reason))
             logger.info('Position: {}, {}'.format(pos[0], pos[1]))
-            logger.info('Charging status: {}'.format(
-                charging_status))
-            logger.info('Charge time remaining: {}'.format(
-                time_remaining))
-            logger.info('Charge percentage: {}'.format(
-                battery_level))
+            logger.info('Charging status: {}'.format(charging_status))
+            logger.info('Charge time remaining: {}'.format(time_remaining))
+            logger.info('Charge percentage: {}'.format(battery_level))
             logger.info('Driver door: {}'.format(driver_door_status.title()))
             logger.info('Passenger door: {}'.format(
                 passenger_door_status.title()))
             logger.info('Door locks: {}'.format(
                 str(door_locks_status).replace('LockState.', '').title()))
             logger.info('Fuel level: {}%'.format(fuel_level_pct))
+            logger.info('Range: {} miles'.format(range_miles))
 
             if settings.actions.ifttt_notify_not_charging:
                 if charging_status in settings.bad_charge_status:
@@ -127,6 +133,8 @@ def main():
                         slack_message = slack_message + \
                             " {} remains till fully charged.".format(
                                 time_remaining)
+                    slack_message = slack_message + " Its maximum drivable range is {} mi".format(
+                        range_miles)
 
                     to_slack(settings.slack, slack_message, icon=slack_icon)
 
@@ -137,7 +145,8 @@ def main():
                 if settings.actions.slack_notify_door_unlocked:
                     try:
                         slack_message = ':unlock: Your BMW i3 was found to be *UNLOCKED*!'
-                        to_slack(settings.slack, slack_message,
+                        to_slack(settings.slack,
+                                 slack_message,
                                  icon=slack_icon)
                     except Exception as e:
                         logger.warning("Failed to post to Slack: {}".format(e))
@@ -155,7 +164,8 @@ def main():
                     try:
                         slack_message = ':fuelpump: Your BMW i3 is low on gas ({}%)'.format(
                             fuel_level_pct)
-                        to_slack(settings.slack, slack_message,
+                        to_slack(settings.slack,
+                                 slack_message,
                                  icon=slack_icon)
                     except Exception as e:
                         logger.warning("Failed to post to Slack: {}".format(e))
